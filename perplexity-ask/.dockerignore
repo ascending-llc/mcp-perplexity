@@ -11,3 +11,4 @@ README.md
 dist
 *.log
 .DS_Store
+dist
