@@ -140,7 +140,7 @@ if (!PERPLEXITY_API_KEY) {
 }
 
 // Get the port from environment variables (default to 3000)
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = parseInt(process.env.PERPLEXITY_PORT || "3334", 10);
 const DEBUG = process.env.DEBUG === "true";
 
 // Check if we should run in HTTP mode
