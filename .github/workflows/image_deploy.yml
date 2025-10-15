@@ -66,6 +66,11 @@ jobs:
             aws eks update-kubeconfig --name ${{ env.SAAS_EKS_CLUSTER_NAME }} --region ${{ inputs.region }}
           fi
 
+      - name: Update perplexity MCP server on EKS
+        env:
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/perplexity_mcp_server:latest
+        run: kubectl set image deploy/perplexity_mcp_server perplexity_mcp_server=$image -n ${{ inputs.application  }}
+
       - name: Patch Deployment image
         run: |
           kubectl -n ${{ inputs.namespace }} set image deploy/perplexity_mcp_server perplexity_mcp_server=${{ steps.img.outputs.uri }}
