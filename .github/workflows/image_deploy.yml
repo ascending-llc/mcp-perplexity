@@ -71,10 +71,6 @@ jobs:
           image: ${{ steps.login-ecr.outputs.registry }}/jarvis/perplexity_mcp_server:latest
         run: kubectl set image deploy/perplexity-mcp perplexity-mcp=$image -n ${{ inputs.namespace  }}
 
-      - name: Patch Deployment image
-        run: |
-          kubectl -n ${{ inputs.namespace }} set image deploy/perplexity-mcp perplexity-mcp=${{ steps.img.outputs.uri }}
-
       - name: Rollout status
         run: |
           kubectl -n ${{ inputs.namespace }} rollout status deploy/perplexity-mcp
