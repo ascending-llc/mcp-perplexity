@@ -69,7 +69,7 @@ jobs:
       - name: Update perplexity MCP server on EKS
         env:
           image: ${{ steps.login-ecr.outputs.registry }}/jarvis/perplexity_mcp_server:latest
-        run: kubectl set image deploy/perplexity_mcp_server perplexity_mcp_server=$image -n ${{ inputs.application  }}
+        run: kubectl set image deploy/perplexity_mcp_server perplexity_mcp_server=$image -n ${{ inputs.namespace  }}
 
       - name: Patch Deployment image
         run: |
