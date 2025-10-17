@@ -12,15 +12,25 @@ on:
         type: string
         required: true
         default: us-east-1
+      target:
+        description: 'Which account/repo to push to'
+        type: choice
+        required: true
+        default: jarvis
+        options:
+          - jarvis
+          - askcto
 
 permissions:
   id-token: write
-  contents: write 
-
+  contents: write
 
 jobs:
   package-and-push-chart:
     runs-on: ubuntu-latest
+    env:
+      ECR_ACCOUNT_JARVIS: "897729109735"
+      ECR_ACCOUNT_ASKCTO: "595312265488" 
 
     steps:
       - name: Checkout Code
@@ -28,38 +38,52 @@ jobs:
         with:
           fetch-depth: 0  # Need full history for tagging
 
-      - name: Set IAM role to assume
-        id: set-role
+      - name: Choose target (role, account, repo)
+        id: choose
         run: |
-          echo "role=${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}" >> $GITHUB_OUTPUT
+          if [[ "${{ inputs.target }}" == "askcto" ]]; then
+            echo "role=${{ secrets.ASC_AWS_DEPLOY_ROLE_ARN }}" >> $GITHUB_OUTPUT
+            echo "account=${{ env.ECR_ACCOUNT_ASKCTO }}" >> $GITHUB_OUTPUT
+            echo "repo_prefix=askcto/perplexity_mcp_server" >> $GITHUB_OUTPUT
+          else
+            echo "role=${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}" >> $GITHUB_OUTPUT
+            echo "account=${{ env.ECR_ACCOUNT_JARVIS }}" >> $GITHUB_OUTPUT
+            echo "repo_prefix=jarvis/perplexity_mcp_server" >> $GITHUB_OUTPUT
+          fi
 
       - name: Assume IAM Role
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ steps.set-role.outputs.role }}
+          role-to-assume: ${{ steps.choose.outputs.role }}
           aws-region: ${{ inputs.region }}
           role-session-name: ecr-build-session
 
       - name: Login to Amazon ECR
+      # Use the selected registry/account
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         with:
-          registries: "897729109735"
+          registries: "${{ steps.choose.outputs.account }}"
 
       - name: Set image tags
         id: set-tags
         run: |
-          TAGS="${{ steps.login-ecr.outputs.registry }}/jarvis/perplexity_mcp_server:${{ github.sha }}
-          ${{ steps.login-ecr.outputs.registry }}/jarvis/perplexity_mcp_server:latest"
-          
+          REG="${{ steps.login-ecr.outputs.registry }}"
+          REPO="${{ steps.choose.outputs.repo_prefix }}"
+
+          TAGS="${REG}/${REPO}:${{ github.sha }}
+          ${REG}/${REPO}:latest"
+
           if [ -n "${{ inputs.release_version }}" ]; then
-            TAGS="$TAGS
-          ${{ steps.login-ecr.outputs.registry }}/jarvis/perplexity_mcp_server:${{ inputs.release_version }}"
+            TAGS="${TAGS}
+          ${REG}/${REPO}:${{ inputs.release_version }}"
           fi
-          
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAGS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+
+          {
+            echo "tags<<EOF"
+            echo "${TAGS}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create Git tag for release version
         if: ${{ inputs.release_version != '' }}
@@ -68,7 +92,6 @@ jobs:
           TAG_NAME="${{ inputs.release_version }}"
           echo "Creating Git tag: $TAG_NAME"
           
-          # Check if tag already exists
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "⚠️  Tag $TAG_NAME already exists, skipping tag creation"
             echo "tag_created=false" >> $GITHUB_OUTPUT
@@ -95,6 +118,10 @@ jobs:
       - name: Summary
         run: |
           echo "## 🚀 Build and Push Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target:** \`${{ inputs.target }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Account:** \`${{ steps.choose.outputs.account }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region:** \`${{ inputs.region }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **ECR Repo:** \`${{ steps.choose.outputs.repo_prefix }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Docker tags pushed:**" >> $GITHUB_STEP_SUMMARY
           echo "  - \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY  
@@ -105,8 +132,4 @@ jobs:
             if [ "${{ steps.create-tag.outputs.tag_created }}" = "true" ]; then
               echo "- **Git tag created:** \`${{ steps.create-tag.outputs.tag_name }}\` ✅" >> $GITHUB_STEP_SUMMARY
             else
-              echo "- **Git tag:** \`${{ steps.create-tag.outputs.tag_name }}\` (already existed) ⚠️" >> $GITHUB_STEP_SUMMARY
-            fi
-          else
-            echo "- **Git tag:** None (no release_version provided)" >> $GITHUB_STEP_SUMMARY
-          fi
+              echo "- **Git tag:** \`${{ ste
